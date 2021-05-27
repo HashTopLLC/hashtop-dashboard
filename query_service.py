@@ -29,14 +29,16 @@ def get_miners(user_id):
     try:
         miners = []
         response = requests.get(API_URL + f"/miner/{user_id}")
-        for miner in response.json().get('data'):
-            miners.append(
-                {
-                    'label': miner['name'],
-                    'value': miner['id']
-                }
-            )
-        return miners
+        if response.status_code == 200:
+            for miner in response.json().get('data'):
+                miners.append(
+                    {
+                        'label': miner['name'],
+                        'value': miner['id']
+                    }
+                )
+            return miners
+
 
     except requests.exceptions.RequestException as e:
         print(e)
@@ -46,7 +48,8 @@ def get_miners(user_id):
 def get_miner_shares(miner_id):
     try:
         response = requests.get(API_URL + f"/miner/{miner_id}/share")
-        return response.json()
+        if response.status_code == 200:
+            return response.json()
 
     except requests.exceptions.RequestException as e:
         print(e)
