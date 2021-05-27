@@ -12,7 +12,7 @@ def get_users():
     try:
         users = []
         response = requests.get(API_URL + '/user/')
-        for user in response.json()['data']:
+        for user in response.json().get('data'):
             users.append(
                 {
                     'label': user['username'],
@@ -29,7 +29,7 @@ def get_miners(user_id):
     try:
         miners = []
         response = requests.get(API_URL + f"/miner/{user_id}")
-        for miner in response.json()['data']:
+        for miner in response.json().get('data'):
             miners.append(
                 {
                     'label': miner['name'],
