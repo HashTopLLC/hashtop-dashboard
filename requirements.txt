@@ -1,7 +1,0 @@
-dash~=1.19.0
-pandas~=1.2.3
-python-dotenv~=0.17.0
-SQLAlchemy~=1.4.5
-Flask~=1.1.2
-requests~=2.25.1
-timeloop~=1.0.2
