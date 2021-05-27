@@ -39,6 +39,7 @@ def get_miners(user_id):
                 )
             return miners
 
+
     except requests.exceptions.RequestException as e:
         print(e)
         return None
