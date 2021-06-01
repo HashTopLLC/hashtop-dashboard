@@ -54,5 +54,6 @@ def get_miner_shares(miner_id):
 
     except requests.exceptions.RequestException as e:
         print(e)
-        return None
+
+    return None
 
