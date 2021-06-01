@@ -46,9 +46,10 @@ def get_miners(user_id):
 def get_miner_shares(miner_id):
     try:
         response = requests.get(API_URL + f"/miner/{miner_id}/share")
-        return response.json()
+        if response.status_code == 200 and response.json() is not None:
+            return response.json()
 
     except requests.exceptions.RequestException as e:
         print(e)
+        return None
 
-    return response
