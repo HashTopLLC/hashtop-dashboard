@@ -101,7 +101,7 @@ def update_shares_graph(miner_id):
     share_data = query_service.get_miner_shares(miner_id)
     if not share_data:
         return html.Div(
-            dbc.Alert("One of the hamsters running our server died, please try again", color='danger')
+            dbc.Alert("One of the hamsters running our server died. Please try again.", color='danger')
         )
     frame = pd.json_normalize(share_data)
 
