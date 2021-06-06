@@ -104,14 +104,12 @@ def update_shares_graph(miner_id):
             dbc.Alert("One of the hamsters running our server died. Please try again.", color='danger')
         )
     frame = pd.json_normalize(share_data)
-
-    multi = frame.set_index(['gpu_no', 'type']).sort_index()
-
-    share_counts = frame.groupby(['gpu_no', 'type']).size().reset_index(name='count')
-
-    print("FRAME")
     print(frame)
-    fig = px.bar(share_counts, x='gpu_no', y='count', color="type", title="Shares by GPU")
+    #multi = frame.set_index(['gpu_no', 'type']).sort_index()
+
+   # share_counts = frame.groupby(['gpu_no', 'type']).size().reset_index(name='count')
+
+    fig = px.bar(frame, x='start', y='valid', color="gpu_no", title="Shares by GPU")
     return html.Div(
         dcc.Graph(
             id="shares",
