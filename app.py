@@ -121,7 +121,7 @@ def update_shares_graph(miner_id):
     invalid_sum = frame.drop(columns=['duration', 'gpu_no']) \
         .groupby('start')['valid'] \
         .sum() \
-        .reset_index(name='total_valid')
+        .reset_index(name='total_invalid')
     invalid = go.Bar(x=frame['start'], y=frame['invalid'], name='Invalid shares', marker={'color': 'indianred'})
     invalid_smoothed_line = go.Line(x=invalid_sum['start'],
                                     y=signal.savgol_filter(invalid_sum['total_invalid'], 51, 2),
