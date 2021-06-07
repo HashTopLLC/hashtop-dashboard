@@ -119,7 +119,7 @@ def update_shares_graph(miner_id):
                                   line=dict(color="57CC99", width=2.5, shape='spline', smoothing=10))
 
     invalid_sum = frame.drop(columns=['duration', 'gpu_no']) \
-        .groupby('start')['valid'] \
+        .groupby('start')['invalid'] \
         .sum() \
         .reset_index(name='total_invalid')
     invalid = go.Bar(x=frame['start'], y=frame['invalid'], name='Invalid shares', marker={'color': 'indianred'})
