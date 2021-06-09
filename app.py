@@ -109,8 +109,7 @@ def update_shares_graph(miner_id):
     frame = pd.json_normalize(share_data)
 
     # get the total valid shares per time period
-    valid_sum = frame.drop(columns=['duration', 'gpu_no']) \
-        .groupby('start')['valid'] \
+    valid_sum = frame.groupby('start')['valid'] \
         .sum() \
         .reset_index(name='total_valid')
     window_length = round_down_to_odd(frame.groupby('start').ngroups)
@@ -122,8 +121,7 @@ def update_shares_graph(miner_id):
                                   name='Avg valid shares',
                                   line=dict(color="57CC99", width=2.5, shape='spline', smoothing=10))
 
-    invalid_sum = frame.drop(columns=['duration', 'gpu_no']) \
-        .groupby('start')['invalid'] \
+    invalid_sum = frame.groupby('start')['invalid'] \
         .sum() \
         .reset_index(name='total_invalid')
     invalid = go.Bar(x=invalid_sum['start'], y=invalid_sum['total_invalid'], name='Invalid shares',
