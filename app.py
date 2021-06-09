@@ -104,7 +104,7 @@ def update_shares_graph(miner_id):
     share_data = query_service.get_miner_shares(miner_id)
     if not share_data:
         return html.Div(
-            dbc.Alert("One of the hamsters running our server died. Please try again.", color='danger')
+            dbc.Alert("No data to display for the selected timeframe", color='danger')
         )
     frame = pd.json_normalize(share_data)
 
@@ -113,12 +113,12 @@ def update_shares_graph(miner_id):
         .groupby('start')['valid'] \
         .sum() \
         .reset_index(name='total_valid')
-    window_length = round_up_to_odd(frame.groupby('start').ngroups)
+    window_length = round_down_to_odd(frame.groupby('start').ngroups)
     valid = go.Bar(x=valid_sum['start'], y=valid_sum['total_valid'], name='Valid shares',
                    marker={'color': 'mediumpurple'})
     valid_smoothed_line = go.Line(x=valid_sum['start'],
                                   y=signal.savgol_filter(valid_sum['total_valid'], window_length,
-                                                         round_up_to_odd(window_length / 35)),
+                                                         round_down_to_odd(window_length / 35)),
                                   name='Avg valid shares',
                                   line=dict(color="57CC99", width=2.5, shape='spline', smoothing=10))
 
@@ -130,7 +130,7 @@ def update_shares_graph(miner_id):
                      marker={'color': 'indianred'})
     invalid_smoothed_line = go.Line(x=invalid_sum['start'],
                                     y=signal.savgol_filter(invalid_sum['total_invalid'], window_length,
-                                                           round_up_to_odd(window_length / 35)),
+                                                           round_down_to_odd(window_length / 35)),
                                     name='Avg invalid shares',
                                     line=dict(color="orange", width=2.5, shape='spline', smoothing=10))
 
@@ -165,8 +165,8 @@ def update_shares_graph(miner_id):
     )
 
 
-def round_up_to_odd(f):
-    return int(np.ceil(f) // 2 * 2 + 1)
+def round_down_to_odd(f):
+    return int(np.ceil(f) // 2 * 2 + 1) - 2
 
 
 if __name__ == "__main__":
