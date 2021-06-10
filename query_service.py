@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import pandas as pd
 import requests
 import os
 from dotenv import load_dotenv
@@ -49,7 +50,11 @@ def get_miner_shares(miner_id):
     try:
         response = requests.get(API_URL + f"/miner/{miner_id}/share")
         if response.ok:
-            return response.json()
+            # create a dataframe from the share data
+            frame = pd.json_normalize(response.json())
+            # convert the time strings into a tz aware datetime
+            frame['start'] = pd.to_datetime(frame['start']).dt.tz_localize('UTC')
+            return frame
         else:
             print(response.body())
 
