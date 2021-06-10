@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 from scipy import signal
 import pandas as pd
+import pytz
 import base64
 from dash.dependencies import Input, Output
 
@@ -32,15 +33,35 @@ app.title = "Cryptomining Statistics"
 
 encoded_logo = base64.b64encode(open("assets/logo.svg", 'rb').read())
 
-user_list_dropdown = dcc.Dropdown(
-    id='user_list_dropdown',
+user_dropdown = dcc.Dropdown(
+    id='user_dropdown',
     options=query_service.get_users(),
     value=None,
     className='dropdown'
 )
 
-miner_list_dropdown = dcc.Dropdown(
-    id='miner_list_dropdown',
+miner_dropdown = dcc.Dropdown(
+    id='miner_dropdown',
+    value=None,
+    className='dropdown'
+)
+
+tz_dropdown = dcc.Dropdown(
+    id='tz_dropdown',
+    options=[
+        {
+            'label': 'Eastern Time',
+            'value': 'US/Eastern'
+        },
+        {
+            'label': 'Pacific Time',
+            'value': 'US/Pacific'
+        },
+        {
+            'label': 'Central Time',
+            'value': 'US/Central'
+        }
+    ],
     value=None,
     className='dropdown'
 )
@@ -66,8 +87,9 @@ app.layout = html.Div(
         ),
         dbc.Row(
             [
-                dcc.Loading(dbc.Col(html.Div(user_list_dropdown), width='auto'), type='circle', color="#8a51ffff"),
-                dcc.Loading(dbc.Col(html.Div(miner_list_dropdown), width='auto'), type='circle', color="#8a51ffff")
+                dbc.Col(html.Div(tz_dropdown), width='auto'),
+                dcc.Loading(dbc.Col(html.Div(user_dropdown), width='auto'), type='circle', color="#8a51ffff"),
+                dcc.Loading(dbc.Col(html.Div(miner_dropdown), width='auto'), type='circle', color="#8a51ffff")
             ],
             justify='center'
         ),
@@ -86,8 +108,8 @@ app.layout = html.Div(
 
 
 @app.callback(
-    Output('miner_list_dropdown', 'options'),
-    [Input('user_list_dropdown', 'value')])
+    Output('miner_dropdown', 'options'),
+    [Input('user_dropdown', 'value')])
 def update_miners_dropdown(user_id):
     if not user_id:
         raise PreventUpdate
@@ -97,16 +119,19 @@ def update_miners_dropdown(user_id):
 
 @app.callback(
     Output('graphs', 'children'),
-    [Input('miner_list_dropdown', 'value')])
-def update_shares_graph(miner_id):
+    [Input('miner_dropdown', 'value'),
+     Input('tz_dropdown', 'value')])
+def update_shares_graph(miner_id, timezone):
     if not miner_id:
         raise PreventUpdate
-    share_data = query_service.get_miner_shares(miner_id)
-    if not share_data:
+    frame = query_service.get_miner_shares(miner_id)
+    if frame.empty:
         return html.Div(
             dbc.Alert("One of the hamsters running our server died. Please try again.", color='danger')
         )
-    frame = pd.json_normalize(share_data)
+
+    # localize for the tz the user selects
+    frame['start'] = frame['start'].dt.tz_convert(pytz.timezone(timezone))
 
     # get the total valid shares per time period
     valid_sum = frame.drop(columns=['duration', 'gpu_no']) \
@@ -147,7 +172,7 @@ def update_shares_graph(miner_id):
                 figure={
                     'data': [go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h')],
                     'layout':
-                        go.Layout(title=f'Valid/invalid shares % for GPU {gpu_no}', xaxis=dict(tickformat=".2%"))
+                        go.Layout(title=f'Share status for GPU {gpu_no}', xaxis=dict(tickformat=".2%"))
                 })
         )
 
