@@ -191,7 +191,7 @@ def update_shares_graph(miner_id, timezone):
 
 
 def round_down_to_odd(f):
-    return int(np.ceil(f) // 2 * 2 + 1) - 2
+    return max(int(np.ceil(f) // 2 * 2 + 1) - 2, 1)
 
 
 if __name__ == "__main__":
