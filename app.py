@@ -7,6 +7,7 @@ import dash_html_components as html
 import numpy as np
 import plotly.express as px
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 from scipy import signal
 import pandas as pd
 import pytz
@@ -124,21 +125,23 @@ def update_miners_dropdown(user_id):
 def update_shares_graph(miner_id, timezone):
     if not miner_id:
         raise PreventUpdate
-    frame = query_service.get_miner_shares(miner_id)
-    if frame.empty:
+    shares_frame = query_service.get_miner_shares(miner_id)
+    health_frame = query_service.get_miner_healths(miner_id)
+    if shares_frame.empty or health_frame.empty:
         return html.Div(
-            dbc.Alert("No data to display for the selected timeframe", color='danger')
+            dbc.Alert("No share_data to display for the selected timeframe", color='danger')
         )
 
     # localize for the tz the user selects
-    frame['start'] = frame['start'].dt.tz_convert(pytz.timezone(timezone))
+    shares_frame['start'] = shares_frame['start'].dt.tz_convert(pytz.timezone(timezone))
+    health_frame['start'] = health_frame['start'].dt.tz_convert(pytz.timezone(timezone))
 
     # get the total valid shares per time period
-    valid_sum = frame.drop(columns=['duration', 'gpu_no']) \
+    valid_sum = shares_frame.drop(columns=['duration', 'gpu_no']) \
         .groupby('start')['valid'] \
         .sum() \
         .reset_index(name='total_valid')
-    window_length = round_down_to_odd(frame.groupby('start').ngroups)
+    window_length = round_down_to_odd(shares_frame.groupby('start').ngroups)
     valid = go.Bar(x=valid_sum['start'], y=valid_sum['total_valid'], name='Valid shares',
                    marker={'color': 'mediumpurple'})
     valid_smoothed_line = go.Line(x=valid_sum['start'],
@@ -147,7 +150,7 @@ def update_shares_graph(miner_id, timezone):
                                   name='Avg valid shares',
                                   line=dict(color="57CC99", width=2.5, shape='spline', smoothing=10))
 
-    invalid_sum = frame.drop(columns=['duration', 'gpu_no']) \
+    invalid_sum = shares_frame.drop(columns=['duration', 'gpu_no']) \
         .groupby('start')['invalid'] \
         .sum() \
         .reset_index(name='total_invalid')
@@ -162,19 +165,9 @@ def update_shares_graph(miner_id, timezone):
     # create graphs for each gpu showing their invalid vs valid percent
 
     gpu_graphs = []
-    for gpu_no, data in frame.groupby('gpu_no'):
-        total_shares = data['valid'].sum() + data['invalid'].sum()
-        valid_pct = data['valid'].sum() / total_shares
-        invalid_pct = data['invalid'].sum() / total_shares
-        gpu_graphs.append(
-            dcc.Graph(
-                id=f"share_breakdown_{gpu_no}",
-                figure={
-                    'data': [go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h')],
-                    'layout':
-                        go.Layout(title=f'Share status for GPU {gpu_no}', xaxis=dict(tickformat=".2%"))
-                })
-        )
+    merged = pd.merge(shares_frame, health_frame, on=["start", "gpu_no"])
+    for gpu_no, data in merged.groupby('gpu_no'):
+        gpu_graphs.append(make_gpu_shares_graph(gpu_no, data))
 
     return html.Div(
         children=[dcc.Graph(
@@ -188,6 +181,73 @@ def update_shares_graph(miner_id, timezone):
         ],
         className="card"
     )
+
+
+
+def make_gpu_shares_graph(gpu_no, data):
+    total_shares = data['valid'].sum() + data['invalid'].sum()
+    valid_pct = data['valid'].sum() / total_shares
+    invalid_pct = data['invalid'].sum() / total_shares
+
+    # Create figure with secondary y-axis
+    fig = make_subplots(rows=2, cols=1)
+
+    # Add traces
+    fig.add_trace(
+        go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h'),
+        row=1,
+        col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['fan_speed'],
+                   name='fan speed',
+                   mode='lines'
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['temperature'],
+                   name='temperature',
+                   mode='lines'
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['power_draw'],
+                   name='power draw',
+                   mode='lines',
+                   line=dict(color='MediumVioletRed', dash='dot')
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['power_limit'],
+                   name='power limit',
+                   mode='lines',
+                   line=dict(color='MediumVioletRed')
+                   ),
+        row=2,
+        col=1,
+    )
+
+    # Add figure title
+    fig.update_layout(
+        title_text=f'Share status for GPU {gpu_no}',
+    )
+
+    # Set x-axis title
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_xaxes(row=1, col=1, tickformat='.2%')
+
+
+    return dcc.Graph(id=f'gpu{gpu_no}', figure=fig)
 
 
 def round_down_to_odd(f):
