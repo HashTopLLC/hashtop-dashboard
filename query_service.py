@@ -70,6 +70,7 @@ def get_miner_healths(miner_id):
             frame = pd.json_normalize(response.json())
             # convert the time strings into a tz aware datetime
             frame['start'] = pd.to_datetime(frame['start']).dt.tz_localize('UTC')
+            frame['fan_speed'] = frame['fan_speed'] / 100
             return frame
         else:
             print(response)
