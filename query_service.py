@@ -56,7 +56,24 @@ def get_miner_shares(miner_id):
             frame['start'] = pd.to_datetime(frame['start']).dt.tz_localize('UTC')
             return frame
         else:
-            print(response.body())
+            print(response)
+
+    except requests.exceptions.RequestException as e:
+        print(e)
+
+
+def get_miner_healths(miner_id):
+    try:
+        response = requests.get(API_URL + f"/miner/{miner_id}/health")
+        if response.ok:
+            # create a dataframe from the share share_data
+            frame = pd.json_normalize(response.json())
+            # convert the time strings into a tz aware datetime
+            frame['start'] = pd.to_datetime(frame['start']).dt.tz_localize('UTC')
+            frame['fan_speed'] = frame['fan_speed'] / 100
+            return frame
+        else:
+            print(response)
 
     except requests.exceptions.RequestException as e:
         print(e)

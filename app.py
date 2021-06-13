@@ -1,18 +1,14 @@
-from datetime import time
-
 import dash
 import dash_core_components as dcc
 import dash_bootstrap_components as dbc
 import dash_html_components as html
-import numpy as np
-import plotly.express as px
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 from scipy import signal
 import pandas as pd
-import pytz
 import base64
 from dash.dependencies import Input, Output
-
+from utils import round_down_to_odd, moving_average, json_to_df, random_color
 # DATA ACQUISITION GOES HERE
 from dash.exceptions import PreventUpdate
 
@@ -62,8 +58,32 @@ tz_dropdown = dcc.Dropdown(
             'value': 'US/Central'
         }
     ],
-    value=None,
+    value='US/Eastern',
     className='dropdown'
+)
+
+stats_type_dropdown = dcc.Dropdown(
+    id='stats_type_dropdown',
+    options=[
+        {
+            'label': 'Temperature',
+            'value': 'temperature'
+        },
+        {
+            'label': 'Fan Speed',
+            'value': 'fan_speed'
+        },
+        {
+            'label': 'Power',
+            'value': 'power'
+        },
+    ],
+    value='temperature',
+    className='dropdown'
+)
+combined_graph = html.Div(
+    id='combined_graph',
+    style={'padding': 10}
 )
 
 graphs = html.Div(
@@ -89,8 +109,31 @@ app.layout = html.Div(
             [
                 dbc.Col(html.Div(tz_dropdown), width='auto'),
                 dcc.Loading(dbc.Col(html.Div(user_dropdown), width='auto'), type='circle', color="#8a51ffff"),
-                dcc.Loading(dbc.Col(html.Div(miner_dropdown), width='auto'), type='circle', color="#8a51ffff")
+                dcc.Loading(dbc.Col(html.Div(miner_dropdown), width='auto'), type='circle', color="#8a51ffff"),
+                dbc.Col(html.Div(stats_type_dropdown), width='auto'),
             ],
+            justify='center'
+        ),
+        dbc.Row(
+            dbc.Col([
+                dcc.Loading([
+                    dbc.Col(dcc.Store(id="miner_shares_data"), width='auto'),
+                    dbc.Col(dcc.Store(id="miner_healths_data"), width='auto'),
+                ],
+                    type="default",
+                    color="#8a51ffff"
+                )],
+                className="mt-4"
+            )
+        ),
+        dbc.Row(
+            dbc.Col(
+                dcc.Loading(id="combined_graph_spinner",
+                            children=[combined_graph],
+                            type="default",
+                            color="#8a51ffff"),
+                className="mt-4"
+            ),
             justify='center'
         ),
         dbc.Row(
@@ -118,80 +161,238 @@ def update_miners_dropdown(user_id):
 
 
 @app.callback(
-    Output('graphs', 'children'),
-    [Input('miner_dropdown', 'value'),
-     Input('tz_dropdown', 'value')])
-def update_shares_graph(miner_id, timezone):
+    Output('miner_shares_data', 'data'),
+    [Input('miner_dropdown', 'value')])
+def update_miner_shares(miner_id):
     if not miner_id:
         raise PreventUpdate
-    frame = query_service.get_miner_shares(miner_id)
-    if frame.empty:
+    shares_frame = query_service.get_miner_shares(miner_id)
+    if shares_frame.empty:
         return html.Div(
-            dbc.Alert("No data to display for the selected timeframe", color='danger')
+            dbc.Alert("No share data to display for the selected timeframe", color='danger')
         )
 
-    # localize for the tz the user selects
-    frame['start'] = frame['start'].dt.tz_convert(pytz.timezone(timezone))
+    return shares_frame.to_json(orient='records', date_format='iso')
+
+
+@app.callback(
+    Output('miner_healths_data', 'data'),
+    [Input('miner_dropdown', 'value')])
+def update_miner_healths(miner_id):
+    if not miner_id:
+        raise PreventUpdate
+    healths_frame = query_service.get_miner_healths(miner_id)
+    if healths_frame.empty:
+        return html.Div(
+            dbc.Alert("No health data to display for the selected timeframe", color='danger')
+        )
+
+    return healths_frame.to_json(orient='records', date_format='iso')
+
+
+@app.callback(
+    Output('graphs', 'children'),
+    [Input('miner_shares_data', 'data'),
+     Input('miner_healths_data', 'data'),
+     Input('tz_dropdown', 'value')])
+def update_shares_graph(shares_data, healths_data, timezone):
+    if not shares_data or not healths_data:
+        raise PreventUpdate
+
+    healths_frame = json_to_df(healths_data, timezone)
+    shares_frame = json_to_df(shares_data, timezone)
 
     # get the total valid shares per time period
-    valid_sum = frame.drop(columns=['duration', 'gpu_no']) \
+    valid_sum = shares_frame.drop(columns=['duration', 'gpu_no']) \
         .groupby('start')['valid'] \
         .sum() \
         .reset_index(name='total_valid')
-    window_length = round_down_to_odd(frame.groupby('start').ngroups)
+    window_length = round_down_to_odd(shares_frame.groupby('start').ngroups)
     valid = go.Bar(x=valid_sum['start'], y=valid_sum['total_valid'], name='Valid shares',
                    marker={'color': 'mediumpurple'})
+
+    valid_avg_ys = signal.savgol_filter(valid_sum['total_valid'], window_length,
+                                        round_down_to_odd(window_length / 35))
     valid_smoothed_line = go.Line(x=valid_sum['start'],
-                                  y=signal.savgol_filter(valid_sum['total_valid'], window_length,
-                                                         round_down_to_odd(window_length / 35)),
+                                  y=valid_avg_ys,
                                   name='Avg valid shares',
                                   line=dict(color="57CC99", width=2.5, shape='spline', smoothing=10))
 
-    invalid_sum = frame.drop(columns=['duration', 'gpu_no']) \
+    invalid_sum = shares_frame.drop(columns=['duration', 'gpu_no']) \
         .groupby('start')['invalid'] \
         .sum() \
         .reset_index(name='total_invalid')
     invalid = go.Bar(x=invalid_sum['start'], y=invalid_sum['total_invalid'], name='Invalid shares',
                      marker={'color': 'indianred'})
+
+    invalid_avg_ys = signal.savgol_filter(invalid_sum['total_invalid'], window_length,
+                                          round_down_to_odd(window_length / 35))
     invalid_smoothed_line = go.Line(x=invalid_sum['start'],
-                                    y=signal.savgol_filter(invalid_sum['total_invalid'], window_length,
-                                                           round_down_to_odd(window_length / 35)),
+                                    y=invalid_avg_ys,
                                     name='Avg invalid shares',
                                     line=dict(color="orange", width=2.5, shape='spline', smoothing=10))
 
     # create graphs for each gpu showing their invalid vs valid percent
-
     gpu_graphs = []
-    for gpu_no, data in frame.groupby('gpu_no'):
-        total_shares = data['valid'].sum() + data['invalid'].sum()
-        valid_pct = data['valid'].sum() / total_shares
-        invalid_pct = data['invalid'].sum() / total_shares
-        gpu_graphs.append(
-            dcc.Graph(
-                id=f"share_breakdown_{gpu_no}",
-                figure={
-                    'data': [go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h')],
-                    'layout':
-                        go.Layout(title=f'Share status for GPU {gpu_no}', xaxis=dict(tickformat=".2%"))
-                })
-        )
+    merged = pd.merge(shares_frame, healths_frame, on=["start", "gpu_no"])
+    for gpu_no, data in merged.groupby('gpu_no'):
+        gpu_graphs.append(make_gpu_shares_graph(gpu_no, data))
 
     return html.Div(
-        children=[dcc.Graph(
-            id="shares",
-            figure={
-                'data': [valid, valid_smoothed_line, invalid, invalid_smoothed_line],
-                'layout':
-                    go.Layout(title='Valid/invalid shares past 12 hours', barmode='stack')
-            }),
+        children=[
+            dcc.Graph(
+                id="shares",
+                figure={
+                    'data': [valid, valid_smoothed_line, invalid, invalid_smoothed_line],
+                    'layout':
+                        go.Layout(title='Valid/invalid shares past 12 hours', barmode='stack')
+                }),
             *gpu_graphs
         ],
         className="card"
     )
 
 
-def round_down_to_odd(f):
-    return max(int(np.ceil(f) // 2 * 2 + 1) - 2, 1)
+@app.callback(
+    Output('combined_graph', 'children'),
+    [Input('miner_healths_data', 'data'),
+     Input('stats_type_dropdown', 'value'),
+     Input('tz_dropdown', 'value')])
+def update_combined_graph(healths_data, stat, timezone):
+    if not healths_data:
+        raise PreventUpdate
+
+    healths_frame = json_to_df(healths_data, timezone)
+
+    if stat == 'power':
+        return make_power_graph(healths_frame)
+
+    window_length = healths_frame.groupby('start').ngroups
+    fig = make_subplots(rows=1, cols=1)
+
+    for gpu_no, data in healths_frame.groupby('gpu_no'):
+        # calculate a moving average of the y values to smooth them out
+        avg_ys = moving_average(data[stat], int(window_length / 10))
+        fig.add_trace(
+            go.Scatter(x=data['start'], y=avg_ys,
+                       name=data['gpu_name'].iloc[0],
+                       mode='lines'
+                       ),
+            row=1,
+            col=1,
+        )
+
+    if stat == 'temperature':
+        fig.update_yaxes(title=dict(text='Temperature (°C)'), hoverformat='.0f')
+    elif stat == 'fan_speed':
+        fig.update_yaxes(title=dict(text='Fan speed (%)'), tickformat='%f')
+
+    fig.update_xaxes(title=dict(text='Time'))
+
+    return dcc.Graph(id=f'combined', figure=fig)
+
+
+def make_power_graph(data):
+    fig = make_subplots(rows=1, cols=1)
+    window_length = data.groupby('start').ngroups
+    total_gpus = data['gpu_no'].max()
+
+    for gpu_no, data in data.groupby('gpu_no'):
+        # generate a color for the pair of power use/limit for this gpu
+        color = random_color()
+        # calculate a moving average of the y values to smooth them out
+        avg_power_draw = moving_average(data['power_draw'], int(window_length / 100))
+
+        gpu_name = data['gpu_name'].iloc[0]
+        fig.add_trace(
+            go.Scatter(x=data['start'], y=avg_power_draw,
+                       name=f'{gpu_name} Power used',
+                       mode='lines',
+                       legendgroup=f'gpu_{gpu_no}',
+                       line=dict(color=color)
+                       ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Scatter(x=data['start'], y=data['power_limit'],
+                       name=f'{gpu_name} Power limit',
+                       mode='lines',
+                       legendgroup=f'gpu_{gpu_no}',
+                       line=dict(dash='dot', color=color),
+                       ),
+            row=1,
+            col=1,
+        )
+    fig.update_yaxes(title=dict(text='Power in watts'), hoverformat='.0f')
+    fig.update_xaxes(title=dict(text='Time'))
+
+    return dcc.Graph(id=f'combined', figure=fig)
+
+
+def make_gpu_shares_graph(gpu_no, data):
+    total_shares = data['valid'].sum() + data['invalid'].sum()
+    valid_pct = data['valid'].sum() / total_shares
+    invalid_pct = data['invalid'].sum() / total_shares
+
+    # Create figure with secondary y-axis
+    fig = make_subplots(rows=2, cols=1)
+
+    # Add traces
+    fig.add_trace(
+        go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h'),
+        row=1,
+        col=1
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['fan_speed'],
+                   name='fan speed',
+                   mode='lines'
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['temperature'],
+                   name='temperature',
+                   mode='lines'
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['power_draw'],
+                   name='power draw',
+                   mode='lines',
+                   line=dict(color='MediumVioletRed', dash='dot')
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['power_limit'],
+                   name='power limit',
+                   mode='lines',
+                   line=dict(color='MediumVioletRed')
+                   ),
+        row=2,
+        col=1,
+    )
+
+    # Add figure title
+    fig.update_layout(
+        title_text=f'Share status for GPU {gpu_no}',
+    )
+
+    # Set x-axis title
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_xaxes(row=1, col=1, tickformat='.2%')
+
+    return dcc.Graph(id=f'gpu{gpu_no}', figure=fig)
 
 
 if __name__ == "__main__":
