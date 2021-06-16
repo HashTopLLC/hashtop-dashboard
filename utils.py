@@ -28,9 +28,9 @@ def get_cmap(n, name='hsv'):
 
 def sav_filter(xs, window_length):
     window_length = round_down_to_odd(window_length)
-    window_length = max(window_length, 3)
-    coeff = max(window_length / 35, 5)
-    return signal.savgol_filter(xs, window_length, coeff)
+    window_length = max(window_length, 5)
+    poly_order = min(int(window_length / 35), 3)
+    return signal.savgol_filter(xs, round_down_to_odd(len(xs)), poly_order)
 
 
 def json_to_df(data, timezone):

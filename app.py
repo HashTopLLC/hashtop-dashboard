@@ -344,14 +344,14 @@ def make_gpu_shares_graph(gpu_no, data):
 
     # Add traces
     fig.add_trace(
-        go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h'),
+        go.Bar(x=[valid_pct, invalid_pct], y=['Valid', 'Invalid'], orientation='h', name='Shares distribution'),
         row=1,
         col=1
     )
 
     fig.add_trace(
         go.Scatter(x=data['start'], y=data['fan_speed'],
-                   name='fan speed',
+                   name='Fan speed',
                    mode='lines'
                    ),
         row=2,
@@ -360,7 +360,16 @@ def make_gpu_shares_graph(gpu_no, data):
 
     fig.add_trace(
         go.Scatter(x=data['start'], y=data['temperature'],
-                   name='temperature',
+                   name='Temperature',
+                   mode='lines'
+                   ),
+        row=2,
+        col=1,
+    )
+
+    fig.add_trace(
+        go.Scatter(x=data['start'], y=data['hashrate'],
+                   name='Hashrate',
                    mode='lines'
                    ),
         row=2,
@@ -369,7 +378,7 @@ def make_gpu_shares_graph(gpu_no, data):
 
     fig.add_trace(
         go.Scatter(x=data['start'], y=data['power_draw'],
-                   name='power draw',
+                   name='Power draw',
                    mode='lines',
                    line=dict(color='MediumVioletRed', dash='dot')
                    ),
@@ -379,7 +388,7 @@ def make_gpu_shares_graph(gpu_no, data):
 
     fig.add_trace(
         go.Scatter(x=data['start'], y=data['power_limit'],
-                   name='power limit',
+                   name='Power limit',
                    mode='lines',
                    line=dict(color='MediumVioletRed')
                    ),
