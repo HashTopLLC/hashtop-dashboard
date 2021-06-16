@@ -8,7 +8,7 @@ from scipy import signal
 import pandas as pd
 import base64
 from dash.dependencies import Input, Output
-from utils import round_down_to_odd, moving_average, json_to_df, random_color
+from utils import round_down_to_odd, moving_average, json_to_df, random_color, sav_filter
 # DATA ACQUISITION GOES HERE
 from dash.exceptions import PreventUpdate
 
@@ -68,6 +68,10 @@ stats_type_dropdown = dcc.Dropdown(
         {
             'label': 'Temperature',
             'value': 'temperature'
+        },
+        {
+            'label': 'Hashrate',
+            'value': 'hashrate'
         },
         {
             'label': 'Fan Speed',
@@ -207,12 +211,10 @@ def update_shares_graph(shares_data, healths_data, timezone):
         .groupby('start')['valid'] \
         .sum() \
         .reset_index(name='total_valid')
-    window_length = round_down_to_odd(shares_frame.groupby('start').ngroups)
+    window_length = shares_frame.groupby('start').ngroups
     valid = go.Bar(x=valid_sum['start'], y=valid_sum['total_valid'], name='Valid shares',
                    marker={'color': 'mediumpurple'})
-
-    valid_avg_ys = signal.savgol_filter(valid_sum['total_valid'], window_length,
-                                        round_down_to_odd(window_length / 35))
+    valid_avg_ys = sav_filter(valid_sum['total_valid'], window_length)
     valid_smoothed_line = go.Line(x=valid_sum['start'],
                                   y=valid_avg_ys,
                                   name='Avg valid shares',
@@ -225,8 +227,7 @@ def update_shares_graph(shares_data, healths_data, timezone):
     invalid = go.Bar(x=invalid_sum['start'], y=invalid_sum['total_invalid'], name='Invalid shares',
                      marker={'color': 'indianred'})
 
-    invalid_avg_ys = signal.savgol_filter(invalid_sum['total_invalid'], window_length,
-                                          round_down_to_odd(window_length / 35))
+    invalid_avg_ys = sav_filter(invalid_sum['total_invalid'], window_length)
     invalid_smoothed_line = go.Line(x=invalid_sum['start'],
                                     y=invalid_avg_ys,
                                     name='Avg invalid shares',
@@ -267,7 +268,7 @@ def update_combined_graph(healths_data, stat, timezone):
     if stat == 'power':
         return make_power_graph(healths_frame)
 
-    window_length = healths_frame.groupby('start').ngroups
+    window_length = healths_frame.groupby('start').ngroups + 2
     fig = make_subplots(rows=1, cols=1)
 
     for gpu_no, data in healths_frame.groupby('gpu_no'):
@@ -286,6 +287,8 @@ def update_combined_graph(healths_data, stat, timezone):
         fig.update_yaxes(title=dict(text='Temperature (°C)'), hoverformat='.0f')
     elif stat == 'fan_speed':
         fig.update_yaxes(title=dict(text='Fan speed (%)'), tickformat='%f')
+    elif stat == 'hashrate':
+        fig.update_yaxes(title=dict(text='Hashrate (MH/s)'), tickformat='.2f')
 
     fig.update_xaxes(title=dict(text='Time'))
 
@@ -294,14 +297,15 @@ def update_combined_graph(healths_data, stat, timezone):
 
 def make_power_graph(data):
     fig = make_subplots(rows=1, cols=1)
-    window_length = data.groupby('start').ngroups
+    window_length = max(int(data.groupby('start').ngroups / 100), 1)
     total_gpus = data['gpu_no'].max()
 
     for gpu_no, data in data.groupby('gpu_no'):
+        print(data['power_draw'])
         # generate a color for the pair of power use/limit for this gpu
         color = random_color()
         # calculate a moving average of the y values to smooth them out
-        avg_power_draw = moving_average(data['power_draw'], int(window_length / 100))
+        avg_power_draw = moving_average(data['power_draw'], window_length)
 
         gpu_name = data['gpu_name'].iloc[0]
         fig.add_trace(

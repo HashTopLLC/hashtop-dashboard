@@ -1,3 +1,5 @@
+from scipy import signal
+
 import numpy as np
 import pandas as pd
 import pytz
@@ -6,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 def moving_average(x, w):
-    return np.convolve(x, np.ones(w), 'valid') / w
+    return np.convolve(x, np.ones(w)) / w
 
 
 def round_down_to_odd(f):
@@ -24,9 +26,16 @@ def get_cmap(n, name='hsv'):
     return plt.cm.get_cmap(name, n)
 
 
+def sav_filter(xs, window_length):
+    window_length = round_down_to_odd(window_length)
+    window_length = max(window_length, 3)
+    coeff = max(window_length / 35, 5)
+    return signal.savgol_filter(xs, window_length, coeff)
+
+
 def json_to_df(data, timezone):
     df = pd.read_json(data)
-    print(df.head())
+    #print(df.head())
     # convert the string time to tz aware datetime
     df['start'] = pd.to_datetime(df['start'])
     # localize for the tz the user selects
