@@ -81,6 +81,14 @@ stats_type_dropdown = dcc.Dropdown(
             'label': 'Power',
             'value': 'power'
         },
+        {
+            'label': 'Core clock',
+            'value': 'core_clock'
+        },
+        {
+            'label': 'Memory clock',
+            'value': 'mem_clock'
+        },
     ],
     value='temperature',
     className='dropdown'
@@ -289,6 +297,8 @@ def update_combined_graph(healths_data, stat, timezone):
         fig.update_yaxes(title=dict(text='Fan speed (%)'), tickformat='%f')
     elif stat == 'hashrate':
         fig.update_yaxes(title=dict(text='Hashrate (MH/s)'), tickformat='.2f')
+    elif stat == 'mem_clock' or stat == 'core_clock':
+        fig.update_yaxes(title=dict(text='Clock (Mhz)'))
 
     fig.update_xaxes(title=dict(text='Time'))
 
