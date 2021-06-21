@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 def moving_average(x, w):
-    return np.convolve(x, np.ones(w)) / w
+    return np.convolve(x, np.ones(w), mode='valid') / w
 
 
 def round_down_to_odd(f):
