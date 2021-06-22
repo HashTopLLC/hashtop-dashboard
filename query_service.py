@@ -46,9 +46,13 @@ def get_miners(user_id):
         return None
 
 
-def get_miner_shares(miner_id):
+def get_miner_shares(miner_id, start_date, end_date):
     try:
-        response = requests.get(API_URL + f"/miner/{miner_id}/share")
+        params = {
+            'start': start_date,
+            'end': end_date
+        }
+        response = requests.get(API_URL + f"/miner/{miner_id}/share", params=params)
         if response.ok:
             # create a dataframe from the share data
             frame = pd.json_normalize(response.json())
@@ -62,9 +66,13 @@ def get_miner_shares(miner_id):
         print(e)
 
 
-def get_miner_healths(miner_id):
+def get_miner_healths(miner_id, start_date, end_date):
     try:
-        response = requests.get(API_URL + f"/miner/{miner_id}/health")
+        params = {
+            'start': start_date,
+            'end': end_date
+        }
+        response = requests.get(API_URL + f"/miner/{miner_id}/health", params=params)
         if response.ok:
             # create a dataframe from the share share_data
             frame = pd.json_normalize(response.json())
