@@ -11,7 +11,7 @@ from dash.dependencies import Input, Output
 from utils import round_down_to_odd, moving_average, json_to_df, random_color, sav_filter
 # DATA ACQUISITION GOES HERE
 from dash.exceptions import PreventUpdate
-
+from dash_datetimepicker import DashDatetimepicker
 import query_service
 
 external_stylesheets = [
@@ -117,13 +117,23 @@ app.layout = html.Div(
             ],
             className="header",
         ),
-        dbc.Row(
-            [
-                dbc.Col(html.Div(tz_dropdown), width='auto'),
-                dcc.Loading(dbc.Col(html.Div(user_dropdown), width='auto'), type='circle', color="#8a51ffff"),
-                dcc.Loading(dbc.Col(html.Div(miner_dropdown), width='auto'), type='circle', color="#8a51ffff"),
-                dbc.Col(html.Div(stats_type_dropdown), width='auto'),
-            ],
+        dbc.Row([
+                dbc.Col([
+                    dbc.Row(
+                        dbc.Col(
+                            html.Div(tz_dropdown),
+                        )
+                    ),
+                    dbc.Row(
+                        dbc.Col(
+                            html.Div(DashDatetimepicker(id='date_picker_range')),
+                        )
+                    )
+                ], width='auto'),
+                    dcc.Loading(dbc.Col(html.Div(user_dropdown), width='auto'), type='circle', color="#8a51ffff"),
+                    dcc.Loading(dbc.Col(html.Div(miner_dropdown), width='auto'), type='circle', color="#8a51ffff"),
+                    dbc.Col(html.Div(stats_type_dropdown), width='auto'),
+                ],
             justify='center'
         ),
         dbc.Row(
@@ -174,11 +184,15 @@ def update_miners_dropdown(user_id):
 
 @app.callback(
     Output('miner_shares_data', 'data'),
-    [Input('miner_dropdown', 'value')])
-def update_miner_shares(miner_id):
+    [Input('miner_dropdown', 'value'),
+     Input('date_picker_range', 'startDate'),
+     Input('date_picker_range', 'endDate')
+     ])
+def update_miner_shares(miner_id, start_date, end_date):
+
     if not miner_id:
         raise PreventUpdate
-    shares_frame = query_service.get_miner_shares(miner_id)
+    shares_frame = query_service.get_miner_shares(miner_id, start_date, end_date)
     if shares_frame.empty:
         return html.Div(
             dbc.Alert("No share data to display for the selected timeframe", color='danger')
@@ -189,11 +203,15 @@ def update_miner_shares(miner_id):
 
 @app.callback(
     Output('miner_healths_data', 'data'),
-    [Input('miner_dropdown', 'value')])
-def update_miner_healths(miner_id):
+    [Input('miner_dropdown', 'value'),
+     Input('date_picker_range', 'startDate'),
+     Input('date_picker_range', 'endDate')
+     ])
+def update_miner_healths(miner_id, start_date, end_date):
+
     if not miner_id:
         raise PreventUpdate
-    healths_frame = query_service.get_miner_healths(miner_id)
+    healths_frame = query_service.get_miner_healths(miner_id, start_date, end_date)
     if healths_frame.empty:
         return html.Div(
             dbc.Alert("No health data to display for the selected timeframe", color='danger')
@@ -301,6 +319,7 @@ def update_combined_graph(healths_data, stat, timezone):
         fig.update_yaxes(title=dict(text='Clock (Mhz)'))
 
     fig.update_xaxes(title=dict(text='Time'))
+    fig.update_xaxes(rangeslider_visible=True)
 
     return dcc.Graph(id=f'combined', figure=fig)
 
